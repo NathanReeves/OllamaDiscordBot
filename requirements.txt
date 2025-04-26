@@ -1,0 +1,6 @@
+# DiscordOllamaBot dependencies
+# Core Discord bot library
+discord.py==2.3.2
+# For HTTP requests to Ollama
+requests==2.31.0
+python-dotenv==1.0.0 
