@@ -3,6 +3,7 @@ import discord
 import requests
 import aiohttp
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 import logging
 import io
@@ -55,10 +56,10 @@ HISTORY_EXPIRY = 60 * 60  # Remove messages older than 1 hour
 # Format: {channel_id: [(timestamp, role, content), ...]}
 conversation_history = defaultdict(deque)
 
-# Set up Discord bot
+# Set up Discord bot with intents
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='/', intents=intents)
 
 def trim_history(channel_id):
     """Trim history to avoid exceeding token limits and remove old conversations."""
@@ -322,7 +323,6 @@ async def query_ollama_with_image(prompt, image_path, channel_id=None, guild=Non
             await update_bot_nickname(guild, f"{model_name} (error)")
         return error_msg
 
-# Respond to !ai messages
 @bot.event
 async def on_ready():
     logging.info(f'Bot is ready and logged in as {bot.user}')
@@ -330,6 +330,13 @@ async def on_ready():
     # Set initial nickname
     for guild in bot.guilds:
         await update_bot_nickname(guild, OLLAMA_MODEL)
+    
+    # Sync slash commands
+    try:
+        synced = await bot.tree.sync()
+        logging.info(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        logging.error(f"Failed to sync commands: {e}")
 
 def split_message(message, limit=1900):
     """Split a message into chunks that fit within Discord's message limit."""
@@ -496,22 +503,20 @@ def extract_code_blocks(content):
     
     return content_without_code, files
 
-@bot.command(name='ai')
-async def ai_command(ctx, *, prompt: str):
-    logging.info(f"Received command from {ctx.author}: !ai {prompt}")
+@bot.tree.command(name="ai", description="Ask the AI a question")
+@app_commands.describe(prompt="What would you like to ask?")
+async def ai_command(interaction: discord.Interaction, prompt: str):
+    logging.info(f"Received command from {interaction.user}: /ai {prompt}")
     
-    # Use channel ID for context (or could use author ID for personal context)
-    channel_id = str(ctx.channel.id)
-    guild = ctx.guild
+    # Use channel ID for context
+    channel_id = str(interaction.channel_id)
+    guild = interaction.guild
     
-    # Start typing - will keep typing indicator while streaming tokens
-    typing_task = asyncio.create_task(keep_typing(ctx))
+    # Acknowledge the interaction to prevent timeout
+    await interaction.response.defer(thinking=True)
     
     try:
         response = await query_ollama(prompt, channel_id, guild)
-        
-        # Cancel typing indicator
-        typing_task.cancel()
         
         # Extract any code blocks with filenames
         message_content, code_files = extract_code_blocks(response)
@@ -520,20 +525,22 @@ async def ai_command(ctx, *, prompt: str):
         if message_content:
             if len(message_content) > 2000:
                 chunks = split_message(message_content)
-                for chunk in chunks:
-                    await ctx.send(chunk)
+                await interaction.followup.send(chunks[0])
+                for chunk in chunks[1:]:
+                    await interaction.channel.send(chunk)
             else:
-                await ctx.reply(message_content)
+                await interaction.followup.send(message_content)
         elif not code_files:  # If no message content and no code files, send the original response
             if len(response) > 2000:
                 chunks = split_message(response)
-                for chunk in chunks:
-                    await ctx.send(chunk)
+                await interaction.followup.send(chunks[0])
+                for chunk in chunks[1:]:
+                    await interaction.channel.send(chunk)
             else:
-                await ctx.reply(response)
+                await interaction.followup.send(response)
         else:
             # If we only have files but no text content, add a simple message
-            await ctx.reply("Here are the files you requested:")
+            await interaction.followup.send("Here are the files you requested:")
         
         # Handle any code files
         for filename, code, lang in code_files:
@@ -545,35 +552,22 @@ async def ai_command(ctx, *, prompt: str):
             # Create and send the file
             file = io.StringIO(code)
             discord_file = discord.File(fp=file, filename=filename)
-            await ctx.send(f"📄 `{filename}`", file=discord_file)
+            await interaction.channel.send(f"📄 `{filename}`", file=discord_file)
             file.close()
             
-        logging.info(f"Replied to {ctx.author} with response and {len(code_files)} code files")
+        logging.info(f"Replied to {interaction.user} with response and {len(code_files)} code files")
     except Exception as e:
-        # Ensure typing indicator is cancelled in case of error
-        typing_task.cancel()
         logging.error(f"Error in ai_command: {e}")
-        await ctx.reply(f"An error occurred: {e}")
+        await interaction.followup.send(f"An error occurred: {e}")
 
-# Helper function to keep discord typing indicator active
-async def keep_typing(ctx):
-    try:
-        while True:
-            async with ctx.typing():
-                # Keep typing for 10 seconds at a time
-                # Discord's typing indicator disappears after ~10 seconds
-                await asyncio.sleep(5)
-    except asyncio.CancelledError:
-        # Task was cancelled, which is expected
-        pass
-    except Exception as e:
-        logging.error(f"Error in keep_typing: {e}")
-
-# Add a command to set the model
-@bot.command(name='model')
-async def model_command(ctx, *, model_name: str = None):
+# Model command
+@bot.tree.command(name="model", description="Set or show the current Ollama model")
+@app_commands.describe(model_name="Name of the model to use (leave empty to show current model)")
+async def model_command(interaction: discord.Interaction, model_name: str = None):
     """Set or show the current Ollama model"""
     global OLLAMA_MODEL
+    
+    await interaction.response.defer(thinking=True)
     
     if model_name:
         # Check if model exists
@@ -588,27 +582,27 @@ async def model_command(ctx, *, model_name: str = None):
                         if model_name in available_models:
                             old_model = OLLAMA_MODEL
                             OLLAMA_MODEL = model_name
-                            await update_bot_nickname(ctx.guild, model_name)
-                            await ctx.reply(f"Model changed from `{old_model}` to `{model_name}`")
+                            await update_bot_nickname(interaction.guild, model_name)
+                            await interaction.followup.send(f"Model changed from `{old_model}` to `{model_name}`")
                             logging.info(f"Model changed to {model_name}")
                         else:
                             # Show available models
                             models_list = "\n".join([f"- `{m}`" for m in available_models])
-                            await ctx.reply(f"Model `{model_name}` not found. Available models:\n{models_list}")
+                            await interaction.followup.send(f"Model `{model_name}` not found. Available models:\n{models_list}")
                     else:
                         # If can't check models, try to set it anyway
                         OLLAMA_MODEL = model_name
-                        await update_bot_nickname(ctx.guild, model_name)
-                        await ctx.reply(f"Model set to `{model_name}` (availability not verified)")
+                        await update_bot_nickname(interaction.guild, model_name)
+                        await interaction.followup.send(f"Model set to `{model_name}` (availability not verified)")
         except Exception as e:
             logging.error(f"Error checking models: {e}")
             # If error, try to set the model anyway
             OLLAMA_MODEL = model_name
-            await update_bot_nickname(ctx.guild, model_name)
-            await ctx.reply(f"Model set to `{model_name}` (availability not verified)")
+            await update_bot_nickname(interaction.guild, model_name)
+            await interaction.followup.send(f"Model set to `{model_name}` (availability not verified)")
     else:
         # Show current model
-        await ctx.reply(f"Current model: `{OLLAMA_MODEL}`")
+        await interaction.followup.send(f"Current model: `{OLLAMA_MODEL}`")
         
         # Try to list available models
         try:
@@ -621,27 +615,33 @@ async def model_command(ctx, *, model_name: str = None):
                         if models:
                             # Show all models without truncation
                             models_list = "\n".join([f"- `{model['name']}` ({model['size']})" for model in models])
-                            await ctx.send(f"Available models:\n{models_list}")
+                            await interaction.channel.send(f"Available models:\n{models_list}")
         except Exception as e:
             logging.error(f"Error listing models: {e}")
 
-# Add a command to reset conversation history
-@bot.command(name='reset')
-async def reset_command(ctx):
-    channel_id = str(ctx.channel.id)
+# Reset command
+@bot.tree.command(name="reset", description="Reset the conversation history")
+async def reset_command(interaction: discord.Interaction):
+    channel_id = str(interaction.channel_id)
+    
+    await interaction.response.defer(thinking=True)
+    
     if channel_id in conversation_history:
         conversation_history[channel_id].clear()
-        await ctx.reply("Conversation history has been reset!")
+        await interaction.followup.send("Conversation history has been reset!")
         logging.info(f"Conversation history reset for channel {channel_id}")
     else:
-        await ctx.reply("No conversation history to reset.")
+        await interaction.followup.send("No conversation history to reset.")
 
-# Add a command to view conversation history
-@bot.command(name='history')
-async def history_command(ctx):
-    channel_id = str(ctx.channel.id)
+# History command
+@bot.tree.command(name="history", description="View recent conversation history")
+async def history_command(interaction: discord.Interaction):
+    channel_id = str(interaction.channel_id)
+    
+    await interaction.response.defer(thinking=True)
+    
     if channel_id not in conversation_history or not conversation_history[channel_id]:
-        await ctx.reply("No conversation history in this channel.")
+        await interaction.followup.send("No conversation history in this channel.")
         return
     
     # Create embed for history
@@ -694,61 +694,96 @@ async def history_command(ctx):
         # Add footer with context info
         embed.set_footer(text=f"Showing {count} messages in the context window | Bot will use these for context")
     
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-@bot.command(name='image')
-async def image_command(ctx):
-    """Process an image with a prompt using Ollama."""
-    logging.info(f"Image command received from {ctx.author}")
+@bot.tree.command(name="image", description="Analyze the most recent image")
+@app_commands.describe(prompt="What would you like to ask about the image?")
+async def image_command(interaction: discord.Interaction, prompt: str = None):
+    """Ask the ai about an image. Uses the most recent image in the channel."""
+    logging.info(f"Image command received from {interaction.user}")
     
-    # Check if an image was attached
-    if not ctx.message.attachments:
-        await ctx.send("Please attach an image to analyze.")
-        return
-
-    # Get the image attachment
-    image = ctx.message.attachments[0]
+    await interaction.response.defer(thinking=True)
     
-    # Create temp_images directory if it doesn't exist
-    os.makedirs('temp_images', exist_ok=True)
-    
-    # Save the image
-    image_path = os.path.join('temp_images', 'image.jpg')
-    await image.save(image_path)
-    logging.info(f"Saved image: {image_path}")
-    
-    # Get the prompt
-    prompt = ctx.message.content.replace('!image', '').strip()
-    if not prompt:
-        prompt = "Please describe this image in detail."
-    
-    # Create typing indicator task
-    typing_task = asyncio.create_task(keep_typing(ctx.message.channel))
+    # Search for the most recent image in the channel
+    channel = interaction.channel
+    image_found = False
+    last_image_url = None
+    last_image_filename = "unknown.jpg"
     
     try:
-        response = await query_ollama_with_image(prompt, image_path, ctx.channel.id, ctx.guild)
+        # Look through recent messages to find an image
+        async for message in channel.history(limit=20):  # Check the last 20 messages
+            if message.attachments:
+                for attachment in message.attachments:
+                    # Check if attachment is an image by content type or extension
+                    if attachment.content_type and attachment.content_type.startswith('image/'):
+                        last_image_url = attachment.url
+                        last_image_filename = attachment.filename
+                        image_found = True
+                        logging.info(f"Found image in message from {message.author}: {last_image_filename}")
+                        break
+                if image_found:
+                    break
         
-        # Split long responses into chunks
-        if len(response) > 2000:
-            chunks = split_message(response)
-            for chunk in chunks:
-                await ctx.send(chunk)
-                await asyncio.sleep(0.5)  # Add small delay between chunks
-        else:
-            await ctx.send(response)
+        if not image_found:
+            await interaction.followup.send("No recent images found in this channel. Please upload an image first, then use the /image command.")
+            return
         
+        # Create temp_images directory if it doesn't exist
+        os.makedirs('temp_images', exist_ok=True)
+        
+        # Save the image with a unique filename to prevent race conditions
+        timestamp = int(time.time())
+        image_path = os.path.join('temp_images', f'image_{timestamp}_{interaction.user.id}.jpg')
+        
+        # Download the image
+        async with aiohttp.ClientSession() as session:
+            async with session.get(last_image_url) as resp:
+                if resp.status == 200:
+                    image_data = await resp.read()
+                    with open(image_path, 'wb') as f:
+                        f.write(image_data)
+                    logging.info(f"Downloaded image to: {image_path}")
+                else:
+                    await interaction.followup.send(f"Error downloading image: HTTP status {resp.status}")
+                    return
+        
+        # Get the prompt
+        if not prompt:
+            prompt = "Please describe this image in detail."
+        
+        try:
+            response = await query_ollama_with_image(prompt, image_path, interaction.channel_id, interaction.guild)
+            
+            # Split long responses into chunks
+            if len(response) > 2000:
+                chunks = split_message(response)
+                await interaction.followup.send(chunks[0])
+                for chunk in chunks[1:]:
+                    await interaction.channel.send(chunk)
+                    await asyncio.sleep(0.5)  # Add small delay between chunks
+            else:
+                await interaction.followup.send(response)
+            
+        except Exception as e:
+            error_msg = f"Error processing image: {str(e)}"
+            logging.error(error_msg)
+            logging.exception("Full exception details:")
+            await interaction.followup.send(error_msg)
+        
+        finally:
+            # Try to clean up the image file
+            try:
+                os.remove(image_path)
+                logging.info(f"Removed temporary image: {image_path}")
+            except Exception as e:
+                logging.error(f"Failed to remove temporary image: {e}")
+                
     except Exception as e:
-        error_msg = f"Error processing image: {str(e)}"
+        error_msg = f"Error finding or processing image: {str(e)}"
         logging.error(error_msg)
         logging.exception("Full exception details:")
-        await ctx.send(error_msg)
-        
-    finally:
-        typing_task.cancel()
-        try:
-            await typing_task
-        except asyncio.CancelledError:
-            pass
+        await interaction.followup.send(error_msg)
 
 if __name__ == '__main__':
     bot.run(DISCORD_BOT_TOKEN) 
