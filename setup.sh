@@ -16,7 +16,7 @@ show_help() {
   echo "Examples:"
   echo "  ./setup.sh run llama2    - Start the Discord bot with llama2 model"
   echo "  ./setup.sh install gemma  - Install dependencies and pull gemma model"
-  echo "  ./setup.sh run           - Start with default model (gemma3:12b)"
+  echo "  ./setup.sh run           - Start with default model (gemma3)"
 }
 
 # Check if venv exists, create if it doesn't
@@ -29,7 +29,7 @@ check_venv() {
 
 # Pull Ollama model
 pull_model() {
-  local model=${1:-"gemma3:12b"}
+  local model=${1:-"gemma3"}
   echo "Pulling Ollama model: $model..."
   ollama pull "$model"
 }
