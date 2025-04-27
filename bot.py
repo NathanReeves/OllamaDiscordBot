@@ -579,12 +579,36 @@ async def model_command(interaction: discord.Interaction, model_name: str = None
                         data = await response.json()
                         available_models = [model['name'] for model in data.get('models', [])]
                         
-                        if model_name in available_models:
+                        # Create case-insensitive lookup dictionary
+                        model_lookup = {m.lower(): m for m in available_models}
+                        
+                        # First try exact match (case-insensitive)
+                        if model_name.lower() in model_lookup:
                             old_model = OLLAMA_MODEL
-                            OLLAMA_MODEL = model_name
+                            actual_model = model_lookup[model_name.lower()]
+                            OLLAMA_MODEL = actual_model
                             await update_bot_nickname(interaction.guild, model_name)
-                            await interaction.followup.send(f"Model changed from `{old_model}` to `{model_name}`")
+                            await interaction.followup.send(f"Model changed from `{old_model}` to `{actual_model}`")
                             logging.info(f"Model changed to {model_name}")
+                            return
+                        
+                        # If no exact match, try with ":latest" suffix (case-insensitive)
+                        model_with_latest = f"{model_name}:latest"
+                        if model_with_latest.lower() in model_lookup:
+                            old_model = OLLAMA_MODEL
+                            actual_model = model_lookup[model_with_latest.lower()]
+                            OLLAMA_MODEL = actual_model
+                            await update_bot_nickname(interaction.guild, model_name)
+                            await interaction.followup.send(f"Model changed from `{old_model}` to `{actual_model}`")
+                            logging.info(f"Model changed to {model_name}")
+                            return
+                            
+                        # If still no match, check if any version exists (case-insensitive)
+                        matching_models = [m for m in available_models if m.lower().startswith(f"{model_name.lower()}:")]
+                        if matching_models:
+                            # Show available versions
+                            models_list = "\n".join([f"- `{m}`" for m in matching_models])
+                            await interaction.followup.send(f"Multiple versions of `{model_name}` found. Please specify which version you want:\n{models_list}")
                         else:
                             # Show available models
                             models_list = "\n".join([f"- `{m}`" for m in available_models])
