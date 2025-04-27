@@ -24,7 +24,7 @@ logging.basicConfig(
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
-OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma3:12b')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma3')
 DEFAULT_BOT_NAME = os.getenv('DEFAULT_BOT_NAME', 'ollamabot')
 
 logging.info(f"Initialized with model: {OLLAMA_MODEL}")

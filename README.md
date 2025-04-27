@@ -2,6 +2,10 @@
 
 A collaborative AI group chat bot for Discord, powered by Ollama.
 
+Skills required:
+- Be able to run terminal commands
+- Comfortable setting up a discord bot on your server. Great guide to dev portal [here](https://medium.com/technology-hits/how-to-create-a-discord-bot-514898ba0028)
+
 ## Install
 1. Install [Ollama](https://ollama.com/)
 2. Install DiscordOllamaBot:
@@ -34,4 +38,4 @@ The bot uses Ollama models. You can:
 2. Change models at runtime using the `!model` command
 3. View available models using `!model` without parameters
 
-Default model is `gemma3:12b`
+Default model is `gemma3`
