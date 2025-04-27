@@ -7,6 +7,7 @@ A collaborative AI group chat bot for Discord, powered by Ollama.
 - Comfortable setting up a discord bot on your server. Great guide to dev portal [here](https://medium.com/technology-hits/how-to-create-a-discord-bot-514898ba0028).
 
 ## Tools required:
+- Python 3.8+
 - Ollama: [ollama](https://ollama.com/)
 - Discord: [discord.com/download](https://discord.com/download)
 - Discord Bot: [discord.com/developers](https://discord.com/developers/)
@@ -15,6 +16,7 @@ A collaborative AI group chat bot for Discord, powered by Ollama.
     DISCORD_BOT_TOKEN=your_discord_bot_token_here
     OLLAMA_API_URL=http://localhost:11434
 
+# MacOS
 Install DiscordOllamaBot:
    ```sh
    # Install with default model (gemma3)
@@ -24,7 +26,7 @@ Install DiscordOllamaBot:
    ./setup.sh install llama3
    ```
    
-## Run:
+Run:
    ```sh
    # Run with default or previously set model
    ./setup.sh run
@@ -32,7 +34,19 @@ Install DiscordOllamaBot:
    # Or run with a specific model
    ./setup.sh run llama3
    ```
-   
+
+# Windows
+
+Install dependencies:
+```
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+Run the bot directly with python bot.py:
+```
+python bot.py
+```
    
 ## Discord Bot Linking:
 
@@ -40,10 +54,12 @@ Make sure your bot in Discord is working. Then put your discord bot token in the
    
 ## Chat Commands:
 
-`!ai` for any chat request.\
-`!image` to upload an image with your request (vision or multi-modal models only).\
-`!history` to see the current model context.\
-`!model` list available models or set model from Discord.
+`!ai` - Any chat request.\
+`!image` - Upload an image with your request (vision or multi-modal models only).\
+`!history` - See the current model context.\
+`!reset` - Clear chat context.\
+`!model` - List available ollama models.\
+`!model [model_name]` - Change the active model.
 
 
 ## Models:
