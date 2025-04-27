@@ -619,9 +619,8 @@ async def model_command(ctx, *, model_name: str = None):
                         data = await response.json()
                         models = data.get('models', [])
                         if models:
-                            models_list = "\n".join([f"- `{model['name']}` ({model['size']})" for model in models[:10]])
-                            if len(models) > 10:
-                                models_list += f"\n...and {len(models) - 10} more"
+                            # Show all models without truncation
+                            models_list = "\n".join([f"- `{model['name']}` ({model['size']})" for model in models])
                             await ctx.send(f"Available models:\n{models_list}")
         except Exception as e:
             logging.error(f"Error listing models: {e}")
