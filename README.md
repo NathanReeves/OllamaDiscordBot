@@ -54,23 +54,23 @@ Make sure your bot in Discord is working. Then put your discord bot token in the
    
 ## Chat Commands:
 
-`!ai` - Any chat request.\
-`!image` - Upload an image with your request (vision or multi-modal models only).\
-`!history` - See the current model context.\
-`!reset` - Clear chat context.\
-`!model` - List available ollama models.\
-`!model [model_name]` - Change the active model.
+`/ai` - Any chat request.\
+`/image` - Upload an image with your request (vision or multi-modal models only).\
+`/history` - See the current model context.\
+`/reset` - Clear chat context.\
+`/model` - List available ollama models.\
+`/model [model_name]` - Change the active model.
 
 
 ## Models:
 
 Add new models to your arsenal [here](https://ollama.com/search).\
-Change models at runtime in Discord using the `!model` command.\
-View available models using `!model` without parameters.
+Change models at runtime in Discord using the `/model` command.\
+View available models using `/model` without parameters.
 
 ## Security note:
 <b>Use at your own risk.</b> Hide your keys, hide your wife.\
 Make the bot as private as you need to. [Discord Server Safety](https://discord.com/safety/360043653152-four-steps-to-a-super-safe-server)
 
 ## Have fun:
-Please feel free to use this in any way you like. Build on top of it, make something cool.
+Please feel free to use this in any way you like. Build on top of it, vibe out, make something cool.
